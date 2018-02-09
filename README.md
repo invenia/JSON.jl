@@ -5,10 +5,8 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/2sfomjwl29k6y6oy)](https://ci.appveyor.com/project/staticfloat/json-jl)
 [![codecov.io](http://codecov.io/github/JuliaIO/JSON.jl/coverage.svg?branch=master)](http://codecov.io/github/JuliaIO/JSON.jl?branch=master)
 
-[![JSON](http://pkg.julialang.org/badges/JSON_0.3.svg)](http://pkg.julialang.org/?pkg=JSON&ver=0.3)
-[![JSON](http://pkg.julialang.org/badges/JSON_0.4.svg)](http://pkg.julialang.org/?pkg=JSON&ver=0.4)
-[![JSON](http://pkg.julialang.org/badges/JSON_0.5.svg)](http://pkg.julialang.org/?pkg=JSON&ver=0.5)
 [![JSON](http://pkg.julialang.org/badges/JSON_0.6.svg)](http://pkg.julialang.org/?pkg=JSON&ver=0.6)
+[![JSON](http://pkg.julialang.org/badges/JSON_0.7.svg)](http://pkg.julialang.org/?pkg=JSON&ver=0.7)
 
 **Installation**: `julia> Pkg.add("JSON")`
 
@@ -39,7 +37,7 @@ JSON.print(io::IO, s::AbstractString)
 JSON.print(io::IO, s::Union{Integer, AbstractFloat})
 JSON.print(io::IO, n::Void)
 JSON.print(io::IO, b::Bool)
-JSON.print(io::IO, a::Associative)
+JSON.print(io::IO, a::AbstractDict)
 JSON.print(io::IO, v::AbstractVector)
 JSON.print{T, N}(io::IO, v::Array{T, N})
 ```
@@ -61,7 +59,7 @@ JSON.parsefile(filename::AbstractString; dicttype=Dict, use_mmap=true)
 
 Parses a JSON `AbstractString` or IO stream into a nested Array or Dict.
 
-The `dicttype` indicates the dictionary type (`<: Associative`) that
+The `dicttype` indicates the dictionary type (`<: AbstractDict`) that
 JSON objects are parsed to.  It defaults to `Dict` (the built-in Julia
 dictionary), but a different type can be passed to, for example,
 provide a desired ordering.  For example, if you `import DataStructures`

@@ -3,6 +3,8 @@ module Parser  # JSON
 using ..Common
 
 using Compat
+import Compat.Mmap
+using Nullables
 
 """
 Like `isspace`, but work on bytes and includes only the four whitespace
@@ -18,17 +20,17 @@ isjsondigit(b::UInt8) = DIGIT_ZERO ≤ b ≤ DIGIT_NINE
 
 @compat abstract type ParserState end
 
-type MemoryParserState <: ParserState
+mutable struct MemoryParserState <: ParserState
     utf8data::Vector{UInt8}
     s::Int
 end
 
-type StreamingParserState{T <: IO} <: ParserState
+mutable struct StreamingParserState{T <: IO} <: ParserState
     io::T
     cur::UInt8
     used::Bool
 end
-StreamingParserState{T <: IO}(io::T) = StreamingParserState{T}(io, 0x00, true)
+StreamingParserState(io::T) where {T <: IO} = StreamingParserState{T}(io, 0x00, true)
 
 """
 Return the byte at the current position of the `ParserState`. If there is no
@@ -96,7 +98,7 @@ the advancement. If the `ParserState` is already done, then throw an error.
 Return `true` if there is a current byte, and `false` if all bytes have been
 exausted.
 """
-@inline hasmore(ps::MemoryParserState) = ps.s ≤ endof(ps.utf8data)
+@inline hasmore(ps::MemoryParserState) = ps.s ≤ lastindex(ps.utf8data)
 @inline hasmore(ps::StreamingParserState) = true  # no more now ≠ no more ever
 
 """
@@ -126,9 +128,9 @@ function _error(message::AbstractString, ps::MemoryParserState)
     orig = String(ps.utf8data)
     lines = _count_before(orig, '\n', ps.s)
     # Replace all special multi-line/multi-space characters with a space.
-    strnl = replace(orig, r"[\b\f\n\r\t\s]", " ")
+    strnl = replace(orig, r"[\b\f\n\r\t\s]" => " ")
     li = (ps.s > 20) ? ps.s - 9 : 1 # Left index
-    ri = min(endof(orig), ps.s + 20)       # Right index
+    ri = min(lastindex(orig), ps.s + 20)       # Right index
     error(message *
       "\nLine: " * string(lines) *
       "\nAround: ..." * strnl[li:ri] * "..." *
@@ -214,7 +216,7 @@ function parse_object(ps::ParserState, dictT::Type)
             # Read value
             value = parse_value(ps, dictT)
             chomp_space!(ps)
-            obj[convert(keyT, key)] = value
+            obj[keyT === Symbol ? Symbol(key) : convert(keyT, key)] = value
             byteat(ps) == OBJECT_END && break
             skip!(ps, DELIMITER)
         end
@@ -269,7 +271,7 @@ function parse_string(ps::ParserState)
         if c == BACKSLASH
             c = advance!(ps)
             if c == LATIN_U  # Unicode escape
-                append!(b, Vector{UInt8}(string(read_unicode_escape!(ps))))
+                append!(b, unsafe_wrap(Vector{UInt8}, string(read_unicode_escape!(ps))))
             else
                 c = get(ESCAPES, c, 0x00)
                 c == 0x00 && _error(E_BAD_ESCAPE, ps)
@@ -365,13 +367,13 @@ function parse_number(ps::ParserState)
 end
 
 
-function unparameterize_type{T}(::Type{T})
-    candidate = typeintersect(T, Associative{String, Any})
+function unparameterize_type(::Type{T}) where T
+    candidate = typeintersect(T, AbstractDict{String, Any})
     candidate <: Union{} ? T : candidate
 end
 
-function parse{T<:Associative}(str::AbstractString; dicttype::Type{T}=Dict{String,Any})
-    ps = MemoryParserState(Vector{UInt8}(String(str)), 1)
+function parse(str::AbstractString; dicttype::Type{T}=Dict{String,Any}) where T <: AbstractDict
+    ps = MemoryParserState(codeunits(str), 1)
     v = parse_value(ps, unparameterize_type(T))
     chomp_space!(ps)
     if hasmore(ps)
@@ -380,15 +382,15 @@ function parse{T<:Associative}(str::AbstractString; dicttype::Type{T}=Dict{Strin
     v
 end
 
-function parse{T<:Associative}(io::IO; dicttype::Type{T}=Dict{String,Any})
+function parse(io::IO; dicttype::Type{T}=Dict{String,Any}) where T <: AbstractDict
     ps = StreamingParserState(io)
     parse_value(ps, unparameterize_type(T))
 end
 
-function parsefile{T<:Associative}(filename::AbstractString; dicttype::Type{T}=Dict{String, Any}, use_mmap=true)
+function parsefile(filename::AbstractString; dicttype::Type{<:AbstractDict}=Dict{String, Any}, use_mmap=true)
     sz = filesize(filename)
     open(filename) do io
-        s = use_mmap ? String(Mmap.mmap(io, Vector{UInt8}, sz)) : readstring(io)
+        s = use_mmap ? String(Mmap.mmap(io, Vector{UInt8}, sz)) : read(io, String)
         parse(s; dicttype=dicttype)
     end
 end

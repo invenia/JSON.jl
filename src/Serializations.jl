@@ -35,6 +35,6 @@ All serializations defined for `CommonSerialization` are inherited by
 `StandardSerialization`. It is therefore generally advised to add new
 serialization behaviour to `CommonSerialization`.
 """
-immutable StandardSerialization <: CommonSerialization end
+struct StandardSerialization <: CommonSerialization end
 
 end

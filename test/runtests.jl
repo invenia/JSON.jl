@@ -1,8 +1,12 @@
 using JSON
-using Base.Test
 using Compat
+using Compat.Test
 
 import DataStructures
+using Nullables
+using Compat.Dates
+using Compat.Distributed
+import Compat.Sys
 
 include("json-checker.jl")
 include("json-samples.jl")
@@ -210,7 +214,7 @@ obj = JSON.parse("{\"\U0001d712\":\"\\ud835\\udf12\"}")
 tmppath, io = mktemp()
 write(io, facebook)
 close(io)
-if is_windows()
+if Sys.iswindows()
     # don't use mmap on Windows, to avoid ERROR: unlink: operation not permitted (EPERM)
     @test haskey(JSON.parsefile(tmppath; use_mmap=false), "data")
 else
@@ -236,7 +240,7 @@ symtest = Dict(:symbolarray => [:apple, :pear], :symbolsingleton => :hello)
          || JSON.json(symtest) == "{\"symbolsingleton\":\"hello\",\"symbolarray\":[\"apple\",\"pear\"]}")
 
 # test for issue #109
-type t109
+mutable struct t109
    i::Int
 end
 let iob = IOBuffer()

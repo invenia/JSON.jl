@@ -14,7 +14,7 @@ function parse_string(ps::MemoryParserState)
     # We can just copy the data from the buffer in this case.
     if fastpath
         s = ps.s
-        unsafe_copy!(b, 1, ps.utf8data, s + 1, len)
+        unsafe_copyto!(b, 1, ps.utf8data, s + 1, len)
         ps.s = s + len + 2
     else
         parse_string(ps, b)
@@ -46,7 +46,7 @@ This function will throw an error if:
 No error is thrown when other invalid backslash escapes are encountered.
 """
 function predict_string(ps::MemoryParserState)
-    e = endof(ps.utf8data)
+    e = lastindex(ps.utf8data)
     fastpath = true  # true if no escapes in this string, so it can be copied
     len = 0          # the number of UTF8 bytes the string contains
 
@@ -85,7 +85,7 @@ passed-in buffer must exactly represent the amount of space needed for parsing.
 """
 function parse_string(ps::MemoryParserState, b)
     s = ps.s
-    e = endof(ps.utf8data)
+    e = lastindex(ps.utf8data)
     i = 0  # number of characters copied
 
     s += 1  # skip past opening string character "
@@ -98,7 +98,8 @@ function parse_string(ps::MemoryParserState, b)
             c = ps.utf8data[s]
             if c == LATIN_U  # Unicode escape
                 ps.s = s + 1
-                for c in Vector{UInt8}(string(read_unicode_escape!(ps)))
+                for ch in unsafe_wrap(Vector{UInt8}, string(read_unicode_escape!(ps)))
+                    c = ch
                     i += 1
                     b[i] = c
                 end
@@ -128,7 +129,7 @@ end
 
 function parse_number(ps::MemoryParserState)
     s = p = ps.s
-    e = endof(ps.utf8data)
+    e = lastindex(ps.utf8data)
     isint = true
 
     # Determine the end of the floating point by skipping past ASCII values

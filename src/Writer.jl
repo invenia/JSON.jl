@@ -1,9 +1,11 @@
 module Writer
 
 using Compat
+import Compat.Dates
 using ..Common
 using ..Serializations: Serialization, StandardSerialization,
                         CommonSerialization
+using Nullables
 
 """
 Internal JSON.jl implementation detail; do not depend on this type.
@@ -11,21 +13,21 @@ Internal JSON.jl implementation detail; do not depend on this type.
 A JSON primitive that wraps around any composite type to enable `Dict`-like
 serialization.
 """
-immutable CompositeTypeWrapper{T}
+struct CompositeTypeWrapper{T}
     wrapped::T
     fns::Vector{Symbol}
 end
-CompositeTypeWrapper(x) = CompositeTypeWrapper(x, fieldnames(x))
+CompositeTypeWrapper(x::T) where {T} = CompositeTypeWrapper{T}(x, fieldnames(T))
 
 """
     lower(x)
 
 Return a value of a JSON-encodable primitive type that `x` should be lowered
-into before encoding as JSON. Supported types are: `Associative` to JSON
+into before encoding as JSON. Supported types are: `AbstractDict` to JSON
 objects, `Tuple` and `AbstractVector` to JSON arrays, `AbstractArray` to nested
 JSON arrays, `AbstractString`, `Symbol`, `Enum`, or `Char` to JSON string,
 `Integer` and `AbstractFloat` to JSON number, `Bool` to JSON boolean, and
-`Void` to JSON null, or any other types with a `show_json` method defined.
+`Nothing` to JSON null, or any other types with a `show_json` method defined.
 
 Extensions of this method should preserve the property that the return value is
 one of the aforementioned types. If first lowering to some intermediate type is
@@ -43,7 +45,7 @@ function lower(a)
     end
 end
 
-lower(s::Base.Dates.TimeType) = string(s)
+lower(s::Dates.TimeType) = string(s)
 
 # To avoid allocating an intermediate string, we directly define `show_json`
 # for this type instead of lowering it to a string first (which would
@@ -54,7 +56,7 @@ const IsPrintedAsString = Union{Char, Type, AbstractString, Enum, Symbol}
 lower(x::IsPrintedAsString) = x
 
 lower(m::Module) = throw(ArgumentError("cannot serialize Module $m as JSON"))
-lower(x::Real) = Float64(x)
+lower(x::Real) = convert(Float64, x)
 
 """
 Abstract supertype of all JSON and JSON-like structural writer contexts.
@@ -81,7 +83,7 @@ Internal implementation detail.
 Keeps track of the current location in the array or object, which winds and
 unwinds during serialization.
 """
-type PrettyContext{T<:IO} <: JSONContext
+mutable struct PrettyContext{T<:IO} <: JSONContext
     io::T
     step::Int     # number of spaces to step
     state::Int    # number of steps at present
@@ -94,7 +96,7 @@ Internal implementation detail.
 
 For compact printing, which in JSON is fully recursive.
 """
-type CompactContext{T<:IO} <: JSONContext
+mutable struct CompactContext{T<:IO} <: JSONContext
     io::T
     first::Bool
 end
@@ -105,7 +107,7 @@ Internal implementation detail.
 
 Implements an IO context safe for printing into JSON strings.
 """
-immutable StringContext{T<:IO} <: IO
+struct StringContext{T<:IO} <: IO
     io::T
 end
 
@@ -264,7 +266,7 @@ function show_json(io::SC, s::CS, x::Union{Integer, AbstractFloat})
     end
 end
 
-show_json(io::SC, ::CS, ::Void) = show_null(io)
+show_json(io::SC, ::CS, ::Nothing) = show_null(io)
 
 function show_json(io::SC, s::CS, a::Nullable)
     if isnull(a)
@@ -274,7 +276,7 @@ function show_json(io::SC, s::CS, a::Nullable)
     end
 end
 
-function show_json(io::SC, s::CS, a::Associative)
+function show_json(io::SC, s::CS, a::AbstractDict)
     begin_object(io)
     for kv in a
         show_pair(io, s, kv)
@@ -303,9 +305,9 @@ end
 Serialize a multidimensional array to JSON in column-major format. That is,
 `json([1 2 3; 4 5 6]) == "[[1,4],[2,5],[3,6]]"`.
 """
-function show_json{T,n}(io::SC, s::CS, A::AbstractArray{T,n})
+function show_json(io::SC, s::CS, A::AbstractArray{T,n}) where {T, n}
     begin_array(io)
-    newdims = ntuple(_ -> :, Val{n - 1})
+    newdims = ntuple(_ -> :, Val{n - 1}())
     for j in 1:size(A, n)
         show_element(io, s, view(A, newdims..., j))
     end
@@ -313,7 +315,7 @@ function show_json{T,n}(io::SC, s::CS, A::AbstractArray{T,n})
 end
 
 # special case for 0-dimensional arrays
-show_json{T}(io::SC, s::CS, A::AbstractArray{T,0}) = show_json(io, s, A[])
+show_json(io::SC, s::CS, A::AbstractArray{<:Any,0}) = show_json(io, s, A[])
 
 show_json(io::SC, s::CS, a) = show_json(io, s, lower(a))
 

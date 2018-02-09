@@ -1,8 +1,8 @@
 module TestSerializer
 
 using JSON
-using Base.Test
 using Compat
+using Compat.Test
 
 # to define a new serialization behaviour, import these first
 import JSON.Serializations: CommonSerialization, StandardSerialization
@@ -20,7 +20,7 @@ function sprint_kwarg(f, args...; kwargs...)
 end
 
 # issue #168: Print NaN and Inf as Julia would
-immutable NaNSerialization <: CS end
+struct NaNSerialization <: CS end
 JSON.show_json(io::SC, ::NaNSerialization, f::AbstractFloat) =
     Base.print(io, f)
 
@@ -42,8 +42,8 @@ JSON.show_json(io::SC, ::NaNSerialization, f::AbstractFloat) =
 """
 
 # issue #170: Print JavaScript functions directly
-immutable JSSerialization <: CS end
-immutable JSFunction
+struct JSSerialization <: CS end
+struct JSFunction
     data::String
 end
 
@@ -73,7 +73,7 @@ end
 """
 
 # test serializing a type without any fields
-immutable SingletonType end
+struct SingletonType end
 @test_throws ErrorException json(SingletonType())
 
 # test printing to STDOUT
@@ -83,7 +83,7 @@ let filename = tempname()
             JSON.print(Any[1, 2, 3.0])
         end
     end
-    @test readstring(filename) == "[1,2,3.0]"
+    @test read(filename, String) == "[1,2,3.0]"
     rm(filename)
 end
 
